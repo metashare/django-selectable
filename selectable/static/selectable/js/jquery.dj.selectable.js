@@ -12,11 +12,10 @@
  *
 */
 (function($) {
-
-	$.widget("ui.djselectable", {
-
+    $.widget("ui.djselectable", {
         options: {
             removeIcon: "ui-icon-close",
+            editIcon: "ui-icon-pencil",
             comboboxIcon: "ui-icon-triangle-1-s",
             prepareQuery: null,
             highlightMatch: true,
@@ -32,18 +31,47 @@
             if (style === 'bottom' || style === 'bottom-inline') {
                 $(this.element).after(this.deck);
             } else {
-                $(this.element).before(this.deck);
+                //$(this.element).before(this.deck);
+                $(this.searchIcon).before(this.deck);
             }
             $(self.hiddenMultipleSelector).each(function(i, input) {
                 self._addDeckItem(input);
             });
         },
 
+        _handleAlignment: function() {
+            /* Handle correct alignment */
+            if(this.deck.hasClass('selectable-deck-top'))
+            {
+                var jqLab = $(this.deck.parent().children('label').get(0));
+                var jqImg = $(this.deck.parent().children('a').get(0));
+                var labBottom = jqLab.position().top + jqLab.height();
+                var deckBottom = this.deck.position().top + this.deck.height() + parseInt(this.deck.css('margin-bottom'));
+                var imgTop = jqImg.position().top;
+                if(deckBottom < labBottom)
+                {
+                    jqImg.css('margin-left', 0);
+                    jqImg.css('padding-left', 0);
+                }
+                else
+                {
+                    var mgLeft = this.deck.css('margin-left');
+                    var pdLeft = this.deck.css('padding-left');
+                    jqImg.css('margin-left', mgLeft);
+                    jqImg.css('padding-left', pdLeft);
+                }
+            }
+
+        },
+
         _addDeckItem: function(input) {
             /* Add new deck list item from a given hidden input */
             var self = this;
-            $('<li>')
-            .text($(input).attr('title'))
+            var recId = $(input).attr('value');
+            var title = $(input).attr('title');
+            var jqItem = $('<li>')
+            .attr('val_id', recId)
+            .append($('<span>').addClass('title').text(title))
             .addClass('selectable-deck-item')
             .appendTo(this.deck)
             .append(
@@ -59,12 +87,63 @@
                         text: false
                     })
                     .click(function() {
+                        if(self.allowEditing)
+                        {
+                            var isSure = confirm("Are you sure you want to remove this item from the list?");
+                            if(!isSure)
+                            {
+                                return false;
+                            }
+                        }
                         $(input).remove();
                         $(this).closest('li').remove();
                         return false;
                     })
                 )
             );
+            self._handleAlignment();
+
+            if(self.isSubclassable)
+            {
+                var modelClass = $(input).attr('model-class');
+                if(modelClass)
+                {
+                    var editingUrl = self.baseUrl + modelClass;
+                    $(input).attr('editing-url', editingUrl);
+                }
+            }
+            if(self.allowEditing && ((self.baseEditingUrl != null) || self.isSubclassable))
+            {
+                jqItem.append(
+                        $('<div>')
+                        .addClass('selectable-deck-edit')
+                        .append(
+                            $('<a>')
+                            .attr('href', '#')
+                            .button({
+                                icons: {
+                                    primary: self.options.editIcon
+                                },
+                                text: false
+                            })
+                            .click(function() {
+                                var recId = $(input).attr('value');
+                                var link = null;
+                                if(self.isSubclassable)
+                                {
+                                    link = $(input).attr('editing-url') + "/" + recId + "/";
+                                }
+                                else
+                                {
+                                    link = self.baseEditingUrl + "/" + recId + "/";
+                                }
+                                var name = 'id_' + self.textName;
+                                showEditPopup(link, name, self);
+                                return false;
+                            })
+                        )
+                    );
+            }
         },
 
         select: function(item, event) {
@@ -86,10 +165,17 @@
                             'name': self.hiddenName,
                             'value': item.id,
                             'title': item.value,
-                            'data-selectable-type': 'hidden-multiple'
+                            'data-selectable-type': 'hidden-multiple',
+                            'model-class': item.cls
                         });
                         $(input).after(newInput);
                         self._addDeckItem(newInput);
+                        /* Clear the input text again after some time since
+                         * some other event handler tries to set the selected value
+                         */
+                        setTimeout(function(){
+                            $(input).val("");
+                        }, 200);
                         return false;
                     }
                 } else {
@@ -102,12 +188,43 @@
             }
         },
 
+        showThrobber: function() {
+            var self = this;
+            if(self.throbberImg)
+            {
+                $(self.searchIcon).attr('src', self.throbberImg);
+            }
+        },
+
+        hideThrobber: function() {
+            var self = this;
+            $(self.searchIcon).attr('src', self.searchImg);
+        },
+
         _create: function() {
             /* Initialize a new selectable widget */
             var self = this,
             input = this.element,
             data = $(input).data();
             self.allowNew = data.selectableAllowNew || data['selectable-allow-new'];
+            self.isSubclassable = data.selectableIsSubclassable || data['selectable-is-subclassable'];
+            self.allowEditing = data.selectableAllowEditing || data['selectable-allow-editing'];
+            self.baseUrl = data.selectableBaseUrl || data['selectable-base-url'];
+            self.throbberImg = data.selectableThrobberImg || data['selectable-throbber-img'];
+            self.useStateError = data.selectableUseStateError;// || data['selectable-use-state-error'];
+            if(self.useStateError == undefined) {
+                self.useStateError = true;
+            }
+            self.baseEditingUrl = null;
+            var jqParent = $(input).parent();
+            var jqA = jqParent.find('a');
+            self.searchIcon = jqParent.children('img').get(0);
+            self.searchImg = $(self.searchIcon).attr('src');
+            var href = jqA.attr('href');
+            if(href)
+            {
+                self.baseEditingUrl = href.replace(/\/add\//, '');
+            }
             self.allowMultiple = data.selectableMultiple || data['selectable-multiple'];
             self.textName = $(input).attr('name');
             self.hiddenName = self.textName.replace('_0', '_1');
@@ -133,7 +250,16 @@
                 if (page) {
                     query.page = page;
                 }
-				$.getJSON(url, query, response);
+                //$.getJSON(url, query, response);
+                $(self.element).removeClass('ui-state-not-found');
+                $.getJSON(url, query, function(data, status){
+                    response(data, status);
+                    if(!data.length) {
+                        // highlight the input element if no data was found
+                        $(self.element).addClass('ui-state-not-found');
+                    }
+                    self.hideThrobber();
+                });
             }
             // Create base auto-complete lookup
             $(input).autocomplete({
@@ -142,11 +268,14 @@
                     $(input).removeClass('ui-state-error');
                     if ($(input).val() && !ui.item) {
                         if (!self.allowNew) {
-                            $(input).addClass('ui-state-error');
+                            if(self.useStateError) {
+                                $(input).addClass('ui-state-error');
+                            }
                         }
                     }
                     if (self.allowMultiple && !$(input).hasClass('ui-state-error')) {
                         $(input).val("");
+                        $(input).removeClass('ui-state-not-found');
                         $(input).data("autocomplete").term = "";
                     }
                 },
@@ -161,6 +290,12 @@
                         return false;
                     }
                     self.select(ui.item, event);
+                },
+                search: function(event, ui){
+                    self.showThrobber();
+                },
+                open: function(event, ui){
+                    self.hideThrobber();
                 }
             }).addClass("ui-widget ui-widget-content ui-corner-all");
             // Override the default auto-complete render.
@@ -207,6 +342,14 @@
                     this.menu.next(new $.Event("mouseover"));
                 }
             };
+
+            // Remove 'not-found' state when the input is cleared
+            $(input).bind('keyup', function(){
+                if($(input).val() == '') {
+                    $(input).removeClass('ui-state-not-found');
+                }
+            });
+
             // Additional work for combobox widgets
             var selectableType = data.selectableType || data['selectable-type'];
             if (selectableType === 'combobox') {
@@ -241,8 +384,9 @@
                 });
             }
         }
-	});
+    });
 })(jQuery);
+
 
 function bindSelectables(context) {
     /* Bind all selectable widgets in a given context.
@@ -291,7 +435,7 @@ if (typeof(django) !== "undefined" && typeof(django.jQuery) !== "undefined") {
 /* Monkey-patch Django's dismissAddAnotherPopup(), if defined */
 if (typeof(dismissAddAnotherPopup) !== "undefined" && typeof(windowname_to_id) !== "undefined" && typeof(html_unescape) !== "undefined") {
     var django_dismissAddAnotherPopup = dismissAddAnotherPopup;
-    dismissAddAnotherPopup = function(win, newId, newRepr) {
+    dismissAddAnotherPopup = function(win, newId, newRepr, newClass) {
         /* See if the popup came from a selectable field.
            If not, pass control to Django's code.
            If so, handle it. */
@@ -304,9 +448,18 @@ if (typeof(dismissAddAnotherPopup) !== "undefined" && typeof(windowname_to_id) !
         if (singleWidget || multiWidget) {
             // newId and newRepr are expected to have previously been escaped by
             // django.utils.html.escape.
+            if(!newClass)
+            {
+                /*
+                 * Default value since, for this class, the model name
+                 * will not be set on the server side.
+                 */
+                newClass = 'documentunstructuredstring_model'
+            }
             var item =  {
                 id: html_unescape(newId),
-                value: html_unescape(newRepr)
+                value: html_unescape(newRepr),
+                cls: html_unescape(newClass)
             };
             if (singleWidget) {
                 field.djselectable('select', item);
@@ -328,3 +481,72 @@ $(document).ready(function() {
         bindSelectables('body');
     }
 });
+
+var lastWidget = null;
+var testIframe = false;
+
+function showEditPopup(href, name, widget)
+{
+    lastWidget = widget;
+    if (href.indexOf('?') == -1) {
+        href += '?_popup_o2m=1';
+    } else {
+        href  += '&_popup_o2m=1';
+    }
+    if(!testIframe)
+    {
+        href += '&_caller=opener'
+        var win = window.open(href, name, 'height=500,width=800,resizable=yes,scrollbars=yes');
+        win.focus();
+    }
+    else
+    {
+        href += '&_caller=top'
+        openDialog(href);
+    }
+    return false;
+}
+
+function dismissEditPopup(win, objId, newRepr)
+{
+    var jqLi = lastWidget.deck.find('li[val_id=' + objId + ']');
+    var jqSpan = jqLi.find('span.title');
+    jqSpan.text(newRepr);
+    if(!testIframe)
+    {
+        win.close();
+    }
+    else
+    {
+        closeDialog();
+    }
+}
+
+
+//Test
+
+var jqDialog = null;
+
+function openDialog(href)
+{
+    jqDialog = $("<div>");
+    jqDialog.addClass("dialog");
+    var dialogOpts = {"modal": true, "width": "800", "height": "500"};
+    jqIframe = $("<iframe>");
+    jqIframe.css('width', '100%').css('height', '100%')
+    jqIframe.attr("src", href);
+    jqDialog.append(jqIframe);
+    $("body").append(jqDialog);
+    jqDialog.dialog(dialogOpts);
+}
+
+function closeDialog()
+{
+    jqIframe.remove();
+    jqIframe = null;
+    if(jqDialog != null)
+    {
+        jqDialog.remove();
+        jqDialog = null;
+    }
+}
