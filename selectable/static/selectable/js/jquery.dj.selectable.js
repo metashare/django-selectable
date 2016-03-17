@@ -44,7 +44,7 @@
             if(this.deck.hasClass('selectable-deck-top'))
             {
                 var jqLab = $(this.deck.parent().children('label').get(0));
-                var jqImg = $(this.deck.parent().children('a').get(0));
+                var jqImg = $(this.deck.parent().children('img').get(0));
                 var labBottom = jqLab.position().top + jqLab.height();
                 var deckBottom = this.deck.position().top + this.deck.height() + parseInt(this.deck.css('margin-bottom'));
                 var imgTop = jqImg.position().top;
