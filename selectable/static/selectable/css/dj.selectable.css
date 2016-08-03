@@ -18,6 +18,9 @@ ul.ui-autocomplete li.ui-menu-item {
 ul.selectable-deck li.selectable-deck-item .selectable-deck-remove {
     float: right;
 }
+ul.selectable-deck li.selectable-deck-item .selectable-deck-edit {
+    float: right;
+}
 ul.selectable-deck-bottom-inline,
 ul.selectable-deck-top-inline {
     padding: 0;
